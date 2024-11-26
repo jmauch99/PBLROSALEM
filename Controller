@@ -1,0 +1,170 @@
+using Microsoft.AspNetCore.Mvc;
+using System;
+using ThermoSystems.DAO;
+using ThermoSystems.Models;
+
+namespace ThermoSystems.Controllers
+{
+    public class EstufaController : PadraoController<EstufaViewModel>
+    {
+        public EstufaController()
+        {
+            DAO = new EstufaDAO();
+            GeraProximoId = true;
+            NomeViewForm = "Form";
+            NomeViewIndex = "Index";
+        }
+
+        public override IActionResult Create()
+        {
+            try
+            {
+                ViewBag.Operacao = "I";
+                EstufaViewModel model = new EstufaViewModel
+                {
+                    Descricao = "Selecione o tipo de malha"
+                };
+                return View(NomeViewForm, model);
+            }
+            catch (Exception erro)
+            {
+                return View("Error", new ErrorViewModel(erro.ToString()));
+            }
+        }
+
+        public override IActionResult Edit(int id)
+        {
+            try
+            {
+                ViewBag.Operacao = "A";
+                var model = DAO.Consulta(id);
+
+                if (model == null)
+                {
+                    return RedirectToAction(NomeViewIndex);
+                }
+                else
+                {
+                    return View(NomeViewForm, model);
+                }
+            }
+            catch (Exception erro)
+            {
+                return View("Error", new ErrorViewModel(erro.ToString()));
+            }
+        }
+
+        protected override void ValidaDados(EstufaViewModel estufa, string operacao)
+        {
+            ModelState.Clear();
+
+            if (string.IsNullOrEmpty(estufa.Descricao))
+            {
+                ModelState.AddModelError("Descricao", "O tipo de malha deve ser informado.");
+            }
+
+            if (estufa.Descricao?.ToLower() == "malha aberta")
+            {
+                if (estufa.MV <= 0)
+                {
+                    ModelState.AddModelError("MV", "O valor de MV deve ser maior que zero.");
+                }
+
+                if (estufa.TempoAmostragem <= 0)
+                {
+                    ModelState.AddModelError("TempoAmostragem", "O tempo de amostragem deve ser maior que zero.");
+                }
+            }
+            else if (estufa.Descricao?.ToLower() == "malha fechada")
+            {
+                if (estufa.SP <= 0)
+                {
+                    ModelState.AddModelError("SP", "O valor de SP deve ser maior que zero.");
+                }
+
+                if (estufa.TempoAmostragem <= 0)
+                {
+                    ModelState.AddModelError("TempoAmostragem", "O tempo de amostragem deve ser maior que zero.");
+                }
+
+                if (string.IsNullOrEmpty(estufa.TipoControlador))
+                {
+                    ModelState.AddModelError("TipoControlador", "O tipo de controlador deve ser informado.");
+                }
+
+                // Verificando os valores de KP, KI e KD
+                if (estufa.KP < 0)
+                {
+                    ModelState.AddModelError("KP", "O valor de KP deve ser maior ou igual a zero.");
+                }
+
+                if (estufa.KI < 0)
+                {
+                    ModelState.AddModelError("KI", "O valor de KI deve ser maior ou igual a zero.");
+                }
+
+                if (estufa.KD < 0)
+                {
+                    ModelState.AddModelError("KD", "O valor de KD deve ser maior ou igual a zero.");
+                }
+            }
+            else
+            {
+                ModelState.AddModelError("Descricao", "Tipo de malha inválido. Deve ser 'Malha Aberta' ou 'Malha Fechada'.");
+            }
+        }
+
+        public override IActionResult Save(EstufaViewModel model, string Operacao)
+        {
+            try
+            {
+                // Valida os dados do modelo
+                ValidaDados(model, Operacao);
+
+                if (!ModelState.IsValid)
+                {
+                    ViewBag.Operacao = Operacao;
+                    PreencheDadosParaView(Operacao, model);
+                    return View(NomeViewForm, model);
+                }
+
+                // Ajusta os valores com base no tipo de malha
+                if (model.Descricao?.ToLower() == "malha aberta")
+                {
+                    model.SP = null;
+                    model.KP = null;
+                    model.KI = null;
+                    model.KD = null;
+                    model.TipoControlador = null;
+                }
+                else if (model.Descricao?.ToLower() == "malha fechada")
+                {
+                    model.MV = null; // MV só é usado na malha aberta
+                }
+                else
+                {
+                    throw new ArgumentException("Tipo de malha inválido. Deve ser 'Malha Aberta' ou 'Malha Fechada'.");
+                }
+
+                // Decide entre inserção e atualização
+                if (Operacao == "I")
+                {
+                    DAO.Insert(model); // Chama o método de inserção
+                }
+                else if (Operacao == "A")
+                {
+                    if (model.Id == 0)
+                        throw new Exception("O 'id' não pode ser zero para uma atualização.");
+
+                    DAO.Update(model); // Chama o método de atualização
+                }
+
+                return RedirectToAction(NomeViewIndex);
+            }
+            catch (Exception erro)
+            {
+                return View("Error", new ErrorViewModel(erro.ToString()));
+            }
+        }
+    }
+}
